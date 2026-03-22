@@ -1,0 +1,63 @@
+app:
+  name: exam_hwpx_builder
+  output_dir: output
+  work_dir: work
+  debug: true
+
+render:
+  dpi: 300
+  image_format: png
+
+ocr:
+  backend: auto
+  force_page_ocr: false
+  confidence_threshold: 0.78
+  metadata_confidence_threshold: 0.55
+  paragraph_join_max_gap: 18
+  clova:
+    invoke_url: ""
+    secret_key: ""
+    version: V2
+    language: ko
+    timeout_seconds: 60
+    table_detection: true
+
+analysis:
+  question_anchor_pattern: '^\d+\.'
+  subquestion_pattern: '^\(\d+\)'
+  answer_section_keywords:
+    - 정답
+    - 정답 및 풀이
+    - 해설
+    - 풀이
+    - "- 끝 -"
+  question_number_gap_limit: 3
+  image_min_area_ratio: 0.015
+  handwriting_blue_lower: [70, 30, 30]
+  handwriting_blue_upper: [140, 255, 255]
+  handwriting_red_lower_1: [0, 40, 40]
+  handwriting_red_upper_1: [12, 255, 255]
+  handwriting_red_lower_2: [165, 40, 40]
+  handwriting_red_upper_2: [180, 255, 255]
+
+normalize:
+  chemical_arrow_tokens:
+    - '->'
+    - '→'
+    - '<=>'
+    - '⇌'
+  uncertainty_marker: '[불확실]'
+
+restore:
+  upscale_factor: 1.5
+  inpaint_radius: 3
+  preserve_original_overlap_ratio: 0.18
+
+layout:
+  columns: 2
+  page_height_lines: 46
+  first_page_no: 1
+
+qa:
+  checklist_enabled: true
+  severity_default: medium
