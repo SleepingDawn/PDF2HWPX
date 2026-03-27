@@ -11,8 +11,8 @@ from src.utils.logging import configure_logging
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Convert a single exam PDF into a HWPX package.")
     parser.add_argument("--input", required=True, help="Path to one PDF file.")
-    parser.add_argument("--output-dir", default="output")
-    parser.add_argument("--work-dir", default="work")
+    parser.add_argument("--output-dir", default="artifacts/exports/default")
+    parser.add_argument("--work-dir", default="artifacts/runs/default")
     parser.add_argument("--debug", action="store_true", default=True)
     parser.add_argument("--config", default="config/default.yaml")
     return parser

@@ -69,9 +69,8 @@ class ImageObject:
     origin_page: int
     crop_bbox: list[int]
     clean_path: str
-    mask_path: str
-    removed_handwriting: bool
-    restoration_mode: str
+    refinement_mode: str
+    source_kind: str = "image"
     anchor: str = "inline_center"
     width_policy: str = "fit_to_column"
     uncertain: bool = False

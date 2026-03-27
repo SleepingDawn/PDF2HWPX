@@ -36,7 +36,7 @@ NS = {
     "pkg": "http://www.hancom.co.kr/hwpml/2016/meta/pkg#",
 }
 
-REFERENCE_TEMPLATE_PATH = Path("/Users/seyong/Desktop/요섭쌤 화학 조교/PDF2HWPX/2024-3-1-세종과고-AP일반화학1-②기말.hwpx")
+REFERENCE_TEMPLATE_PATH = Path("/Users/seyong/Desktop/요섭쌤 화학 조교/PDF2HWPX/samples/reference/2024-3-1-세종과고-AP일반화학1-②기말.hwpx")
 HWPUNIT_PER_MM = 283.465
 
 
@@ -58,15 +58,17 @@ class HwpxWriter:
         header_xml = self._resolve_header_xml()
         section_xml, preview_text = self._build_section(document, media_entries)
         content_hpf = self._build_content_hpf(title, timestamp, media_entries)
-        settings_xml = self._build_settings()
+        settings_xml = self.template_parts.get("settings.xml", self._build_settings())
         version_xml = self.template_parts.get("version.xml", self._build_version())
-        manifest_xml = self._build_manifest()
-        container_xml = self._build_container()
-        rdf_xml = self._build_rdf()
+        manifest_xml = self.template_parts.get("META-INF/manifest.xml", self._build_manifest())
+        container_xml = self.template_parts.get("META-INF/container.xml", self._build_container())
+        rdf_xml = self.template_parts.get("META-INF/container.rdf", self._build_rdf())
         preview_png = self._build_preview_image(document)
 
         with zipfile.ZipFile(self.output_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("mimetype", "application/hwp+zip")
+            mimetype_info = zipfile.ZipInfo("mimetype")
+            mimetype_info.compress_type = zipfile.ZIP_STORED
+            archive.writestr(mimetype_info, "application/hwp+zip")
             archive.writestr("version.xml", version_xml)
             archive.writestr("Contents/content.hpf", content_hpf)
             archive.writestr("Contents/header.xml", header_xml)
@@ -80,7 +82,9 @@ class HwpxWriter:
             archive.writestr("Preview/PrvText.txt", preview_text)
             archive.writestr("Preview/PrvImage.png", preview_png)
             for media in media_entries:
-                archive.write(media["path"], arcname=media["href"])
+                media_info = zipfile.ZipInfo(media["href"])
+                media_info.compress_type = zipfile.ZIP_STORED
+                archive.writestr(media_info, Path(media["path"]).read_bytes())
         return self.output_path
 
     def _resolve_header_xml(self) -> bytes:
@@ -99,7 +103,15 @@ class HwpxWriter:
             return {}
         parts = {}
         with zipfile.ZipFile(REFERENCE_TEMPLATE_PATH) as archive:
-            for name in ["Contents/header.xml", "Contents/masterpage0.xml", "version.xml"]:
+            for name in [
+                "Contents/header.xml",
+                "Contents/masterpage0.xml",
+                "version.xml",
+                "settings.xml",
+                "META-INF/manifest.xml",
+                "META-INF/container.xml",
+                "META-INF/container.rdf",
+            ]:
                 if name in archive.namelist():
                     parts[name] = archive.read(name)
         return parts
@@ -792,20 +804,10 @@ class HwpxWriter:
         self._append_line_seg(paragraph, "0", vertsize=str(height_hwp), baseline=str(max(800, int(height_hwp * 0.85))))
 
     def _append_line_seg(self, paragraph: etree._Element, textpos: str, vertsize: str = "1200", baseline: str = "1020", horzsize: str = "42520") -> None:
-        linesegarray = etree.SubElement(paragraph, qn("hp", "linesegarray"))
-        etree.SubElement(
-            linesegarray,
-            qn("hp", "lineseg"),
-            textpos=textpos,
-            vertpos="0",
-            vertsize=vertsize,
-            textheight=vertsize,
-            baseline=baseline,
-            spacing="720",
-            horzpos="0",
-            horzsize=horzsize,
-            flags="393216",
-        )
+        # Hancom for macOS crashes on our synthetic lineSeg values.
+        # Let the application rebuild layout metrics on open instead of
+        # emitting unstable line segment data.
+        return
 
     def _build_settings(self) -> bytes:
         settings = etree.Element(qn("ha", "HWPApplicationSetting"), nsmap={"ha": NS["ha"], "config": NS["config"]})

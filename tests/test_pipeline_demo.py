@@ -36,6 +36,11 @@ def test_pipeline_end_to_end(tmp_path: Path) -> None:
     assert Path(result["hwpx_path"]).exists()
     assert result["questions"] >= 1
     assert result["verification"]["valid"] is True
-    run_debug = next((tmp_path / "work").iterdir()) / "debug"
-    assert (run_debug / "exam_meta_candidate.json").exists()
-    assert (run_debug / "layout_plan.json").exists()
+    run_dir = Path(result["run_dir"])
+    assert (run_dir / "decisions" / "exam_meta.json").exists()
+    assert (run_dir / "decisions" / "section_split.json").exists()
+    assert (run_dir / "decisions" / "question_anchors.json").exists()
+    assert (run_dir / "decisions" / "answer_alignment.json").exists()
+    assert (run_dir / "decisions" / "template_hook.json").exists()
+    assert (run_dir / "layout" / "layout_plan.json").exists()
+    assert (run_dir / "questions" / "q001" / "package.json").exists()

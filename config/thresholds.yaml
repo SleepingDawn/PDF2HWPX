@@ -1,0 +1,5 @@
+thresholds:
+  low_confidence_block: 0.78
+  question_anchor_review_gap: 2
+  answer_split_min_score: 0.9
+  formula_review_confidence: 0.8

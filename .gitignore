@@ -3,5 +3,11 @@
 .pytest_cache/
 __pycache__/
 *.pyc
+artifacts/exports/
+artifacts/runs/
+var/cache/
 work/
 output/
+work_*/
+output_*/
+odl_probe/

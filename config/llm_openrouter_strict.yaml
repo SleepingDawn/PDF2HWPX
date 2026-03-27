@@ -1,0 +1,94 @@
+app:
+  name: exam_hwpx_builder
+  output_dir: artifacts/exports/llm_openrouter_strict
+  work_dir: artifacts/runs/llm_openrouter_strict
+  debug: true
+
+render:
+  dpi: 300
+  image_format: png
+
+ocr:
+  confidence_threshold: 0.78
+  precise_block_confidence_threshold: 0.9
+  clova:
+    invoke_url: ""
+    secret_key: ""
+    version: V2
+    language: ko
+    timeout_seconds: 60
+    table_detection: true
+    cache_enabled: true
+    cache_dir: var/cache/clova
+    template:
+      template_id: ""
+      match_keywords: []
+      target_fields:
+        - school
+        - subject
+        - exam_type
+
+analysis:
+  question_anchor_pattern: '^\d+\.'
+  answer_section_keywords:
+    - 정답
+    - 정답 및 풀이
+    - 해설
+    - 풀이
+    - "- 끝 -"
+  opendataloader:
+    enabled: true
+    include_header_footer: false
+    reading_order: null
+
+normalize:
+  chemical_arrow_tokens:
+    - '->'
+    - '→'
+    - '<=>'
+    - '⇌'
+  uncertainty_marker: '[불확실]'
+
+image_refine:
+  backend: nanobanana
+  enabled: false
+
+layout:
+  columns: 2
+  page_height_lines: 46
+  first_page_no: 1
+
+qa:
+  checklist_enabled: true
+  severity_default: medium
+
+agents:
+  llm:
+    enabled: true
+    strict_mode: true
+    framework: langchain
+    base_url: https://openrouter.ai/api/v1
+    api_key: ""
+    api_key_env: OPENROUTER_API_KEY
+    model: openai/gpt-4.1-mini
+    timeout_seconds: 60
+    temperature: 0
+  exam_meta:
+    enabled: true
+  section_split:
+    enabled: true
+  question_segmentation:
+    enabled: true
+  block_typing:
+    enabled: true
+  answer_alignment:
+    enabled: true
+  formula_repair:
+    enabled: true
+  qa_triage:
+    enabled: true
+
+thresholds:
+  low_confidence_block: 0.78
+  question_anchor_review_gap: 2
+  answer_split_min_score: 0.9

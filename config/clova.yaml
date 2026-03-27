@@ -1,0 +1,16 @@
+clova:
+  invoke_url: ""
+  secret_key: ""
+  version: V2
+  language: ko
+  timeout_seconds: 60
+  table_detection: true
+  cache_enabled: true
+  cache_dir: work/ocr_cache/clova
+  template:
+    template_id: ""
+    match_keywords: []
+    target_fields:
+      - school
+      - subject
+      - exam_type

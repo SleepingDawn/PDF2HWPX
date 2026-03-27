@@ -1,114 +1,7 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from pathlib import Path
-
-import cv2
-
-from src.utils.bbox import contains
+from src.utils.bbox import box_area, intersection
 from src.utils.types import TableCell, TableObject
-
-
-def _dedupe_positions(values: list[int], tolerance: int = 10) -> list[int]:
-    values = sorted(values)
-    merged: list[int] = []
-    for value in values:
-        if not merged or abs(value - merged[-1]) > tolerance:
-            merged.append(value)
-        else:
-            merged[-1] = int((merged[-1] + value) / 2)
-    return merged
-
-
-def _line_positions(mask, axis: str, min_length: int) -> list[int]:
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    positions: list[int] = []
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        if axis == "horizontal" and w >= min_length:
-            positions.extend([y, y + h])
-        elif axis == "vertical" and h >= min_length:
-            positions.extend([x, x + w])
-    return _dedupe_positions(positions)
-
-
-def _grid_from_lines(image_path: Path, bbox: list[int]) -> tuple[list[int], list[int]]:
-    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
-    x0, y0, x1, y1 = bbox
-    crop = image[y0:y1, x0:x1]
-    if crop.size == 0:
-        return [], []
-    thresh = cv2.threshold(crop, 210, 255, cv2.THRESH_BINARY_INV)[1]
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (max(12, crop.shape[1] // 8), 1))
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(12, crop.shape[0] // 8)))
-    horizontal = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_h)
-    vertical = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_v)
-    xs = _line_positions(vertical, "vertical", min_length=max(24, crop.shape[0] // 3))
-    ys = _line_positions(horizontal, "horizontal", min_length=max(24, crop.shape[1] // 3))
-    return xs, ys
-
-
-def _words_in_bbox(words: list[dict], bbox: list[int]) -> list[dict]:
-    return [word for word in words if contains(bbox, word["bbox"], margin=4)]
-
-
-def _build_cells_from_grid(words: list[dict], bbox: list[int], xs: list[int], ys: list[int]) -> list[TableCell]:
-    if len(xs) < 2 or len(ys) < 2:
-        return []
-    rows = len(ys) - 1
-    cols = len(xs) - 1
-    content_map: dict[tuple[int, int], list[str]] = defaultdict(list)
-    for word in words:
-        cx = (word["bbox"][0] + word["bbox"][2]) / 2 - bbox[0]
-        cy = (word["bbox"][1] + word["bbox"][3]) / 2 - bbox[1]
-        col = next((index for index in range(cols) if xs[index] <= cx <= xs[index + 1]), None)
-        row = next((index for index in range(rows) if ys[index] <= cy <= ys[index + 1]), None)
-        if row is None or col is None:
-            continue
-        content_map[(row, col)].append(word["text"])
-
-    cells: list[TableCell] = []
-    for row in range(rows):
-        for col in range(cols):
-            text = " ".join(content_map.get((row, col), []))
-            cells.append(
-                TableCell(
-                    row=row,
-                    col=col,
-                    rowspan=1,
-                    colspan=1,
-                    content=[{"type": "text", "text": text.strip()}],
-                )
-            )
-    return cells
-
-
-def _fallback_cells(words: list[dict]) -> tuple[int, int, list[TableCell]]:
-    row_map: dict[int, list[dict]] = defaultdict(list)
-    for word in words:
-        center_y = int((word["bbox"][1] + word["bbox"][3]) / 2)
-        bucket = min(row_map.keys(), key=lambda value: abs(value - center_y)) if row_map else center_y
-        if not row_map or abs(bucket - center_y) > 18:
-            bucket = center_y
-        row_map[bucket].append(word)
-
-    rows_sorted = [sorted(row_words, key=lambda item: item["bbox"][0]) for _, row_words in sorted(row_map.items())]
-    n_rows = len(rows_sorted)
-    n_cols = max((len(row) for row in rows_sorted), default=0)
-    cells: list[TableCell] = []
-    for row_index, row_words in enumerate(rows_sorted):
-        for col_index in range(n_cols):
-            text = row_words[col_index]["text"] if col_index < len(row_words) else ""
-            cells.append(
-                TableCell(
-                    row=row_index,
-                    col=col_index,
-                    rowspan=1,
-                    colspan=1,
-                    content=[{"type": "text", "text": text.strip()}],
-                )
-            )
-    return n_rows, n_cols, cells
 
 
 def build_simple_table(table_id: str, rows: list[list[str]]) -> TableObject:
@@ -127,28 +20,80 @@ def build_simple_table(table_id: str, rows: list[list[str]]) -> TableObject:
     return TableObject(table_id=table_id, n_rows=len(rows), n_cols=max((len(row) for row in rows), default=0), cells=cells)
 
 
-def extract_table_from_page(table_id: str, image_path: Path, bbox: list[int], words: list[dict]) -> tuple[TableObject, bool]:
-    table_words = _words_in_bbox(words, bbox)
-    xs, ys = _grid_from_lines(image_path, bbox)
-    cells = _build_cells_from_grid(table_words, bbox, xs, ys)
-    if cells and len(xs) >= 2 and len(ys) >= 2:
-        return (
-            TableObject(
-                table_id=table_id,
-                n_rows=len(ys) - 1,
-                n_cols=len(xs) - 1,
-                cells=cells,
-            ),
-            True,
-        )
+def _overlap_ratio(box_a: list[int], box_b: list[int]) -> float:
+    inter_area = box_area(intersection(box_a, box_b))
+    if inter_area <= 0:
+        return 0.0
+    return inter_area / max(1, min(box_area(box_a), box_area(box_b)))
 
-    n_rows, n_cols, fallback_cells = _fallback_cells(table_words)
-    return (
-        TableObject(
-            table_id=table_id,
-            n_rows=n_rows or 1,
-            n_cols=n_cols or 1,
-            cells=fallback_cells or build_simple_table(table_id, [["[불확실]"]]).cells,
-        ),
-        False,
+
+def _table_from_clova(table_id: str, ocr_tables: list[dict], bbox: list[int]) -> TableObject | None:
+    best = None
+    best_score = -1.0
+    best_area_delta = None
+    for table in ocr_tables:
+        score = _overlap_ratio(table.get("bbox", [0, 0, 0, 0]), bbox)
+        area_delta = abs(box_area(table.get("bbox", [0, 0, 0, 0])) - box_area(bbox))
+        if score > best_score or (score == best_score and (best_area_delta is None or area_delta < best_area_delta)):
+            best = table
+            best_score = score
+            best_area_delta = area_delta
+    if not best or best_score < 0.45:
+        return None
+    cells = [
+        TableCell(
+            row=int(cell.get("row", 0)),
+            col=int(cell.get("col", 0)),
+            rowspan=int(cell.get("rowspan", 1)),
+            colspan=int(cell.get("colspan", 1)),
+            content=[{"type": "text", "text": (cell.get("text") or "").strip()}],
+        )
+        for cell in best.get("cells", [])
+    ]
+    if not cells:
+        return None
+    table_object = TableObject(
+        table_id=table_id,
+        n_rows=int(best.get("n_rows", 0)) or 1,
+        n_cols=int(best.get("n_cols", 0)) or 1,
+        cells=cells,
     )
+    if not _is_reliable_table(table_object):
+        return None
+    return table_object
+
+
+def _is_reliable_table(table: TableObject) -> bool:
+    if table.n_rows <= 0 or table.n_cols <= 0:
+        return False
+    if table.n_rows == 1 and table.n_cols == 1:
+        return False
+    filled = 0
+    nonempty_rows: set[int] = set()
+    nonempty_cols: set[int] = set()
+    for cell in table.cells:
+        fragments = [fragment.get("text", "").strip() for fragment in cell.content if isinstance(fragment, dict)]
+        if any(fragment for fragment in fragments):
+            filled += 1
+            nonempty_rows.add(cell.row)
+            nonempty_cols.add(cell.col)
+    if filled == 0 or len(table.cells) < max(2, min(4, table.n_rows * table.n_cols)):
+        return False
+    fill_ratio = filled / max(1, len(table.cells))
+    if fill_ratio < 0.6:
+        return False
+    row_coverage = len(nonempty_rows) / max(1, table.n_rows)
+    if row_coverage < 0.75:
+        return False
+    if table.n_cols > 1:
+        col_coverage = len(nonempty_cols) / max(1, table.n_cols)
+        if col_coverage < 0.75:
+            return False
+    return True
+
+
+def extract_table_from_page(table_id: str, bbox: list[int], ocr_tables: list[dict] | None = None) -> tuple[TableObject | None, bool]:
+    clova_table = _table_from_clova(table_id, ocr_tables or [], bbox)
+    if clova_table is not None:
+        return clova_table, True
+    return None, False
