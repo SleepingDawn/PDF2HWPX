@@ -8,7 +8,7 @@
 
 ```bash
 python -m src.main \
-  --input samples/inbox/2024-3-1-세종과고-AP일반화학1-②기말.pdf \
+  --input samples/inbox/xxx.pdf \
   --config config/default.yaml
 ```
 
@@ -21,6 +21,6 @@ ODL 실험 예시:
 
 ```bash
 python -m src.main \
-  --input samples/inbox/2024-3-1-세종과고-AP일반화학1-②기말.pdf \
+  --input samples/inbox/xxx.pdf \
   --config config/opendataloader_experiment.yaml
 ```
